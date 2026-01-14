@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Space Crewmates V2</title>
+<style>
+body {
+  margin: 0;
+  background: #0b0f1a;
+  color: white;
+  font-family: Arial;
+  overflow: hidden;
+}
+#ui {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+}
+#meeting {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.9);
+  text-align: center;
+  padding-top: 100px;
+}
+button {
+  padding: 10px;
+  margin: 5px;
+}
+canvas { display: block; }
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div id="role"></div>
+  <div id="tasks"></div>
+  <div id="cooldown"></div>
+</div>
+
+<div id="meeting">
+  <h1>MEETING</h1>
+  <p>Vote someone out</p>
+  <div id="votes"></div>
+</div>
+
+<canvas id="game"></canvas>
+
+<script>
+const c = document.getElementById("game");
+const ctx = c.getContext("2d");
+c.width = innerWidth;
+c.height = innerHeight;
+
+const keys = {};
+onkeydown = e => keys[e.key.toLowerCase()] = true;
+onkeyup = e => keys[e.key.toLowerCase()] = false;
+
+const player = {
+  x: 300,
+  y: 300,
+  r: 15,
+  speed: 3,
+  role: Math.random() < 0.3 ? "IMPOSTOR" : "CREWMATE",
+  tasks: 3,
+  killCooldown: 0,
+  alive: true
+};
+
+const bots = [];
+for (let i = 0; i < 5; i++) {
+  bots.push({
+    x: Math.random()*600+100,
+    y: Math.random()*400+100,
+    alive: true
+  });
+}
+
+const tasks = [
+  {x:200,y:200,done:false},
+  {x:600,y:150,done:false},
+  {x:500,y:400,done:false}
+];
+
+let meeting = false;
+
+function move() {
+  if (!player.alive || meeting) return;
+  if (keys.w) player.y -= player.speed;
+  if (keys.s) player.y += player.speed;
+  if (keys.a) player.x -= player.speed;
+  if (keys.d) player.x += player.speed;
+
+  player.x = Math.max(20, Math.min(c.width-20, player.x));
+  player.y = Math.max(20, Math.min(c.height-20, player.y));
+}
+
+function drawCircle(x,y,r,color) {
+  ctx.beginPath();
+  ctx.arc(x,y,r,0,Math.PI*2);
+  ctx.fillStyle=color;
+  ctx.fill();
+}
+
+function doTasks() {
+  if (player.role !== "CREWMATE") return;
+  if (!keys.e) return;
+
+  tasks.forEach(t => {
+    if (!t.done && Math.hypot(player.x-t.x,player.y-t.y)<30) {
+      t.done = true;
+      player.tasks--;
+    }
+  });
+}
+
+function kill() {
+  if (player.role !== "IMPOSTOR" || player.killCooldown>0) return;
+  if (!keys.k) return;
+
+  bots.forEach(b=>{
+    if (b.alive && Math.hypot(player.x-b.x,player.y-b.y)<30) {
+      b.alive=false;
+      player.killCooldown=300;
+    }
+  });
+}
+
+function meetingCall() {
+  if (keys.m || keys.r) startMeeting();
+}
+
+function startMeeting() {
+  meeting=true;
+  document.getElementById("meeting").style.display="block";
+  const v=document.getElementById("votes");
+  v.innerHTML="";
+  bots.forEach((b,i)=>{
+    if (b.alive) {
+      const btn=document.createElement("button");
+      btn.textContent="Vote Bot "+(i+1);
+      btn.onclick=()=>{ b.alive=false; endMeeting(); };
+      v.appendChild(btn);
+    }
+  });
+}
+
+function endMeeting() {
+  meeting=false;
+  document.getElementById("meeting").style.display="none";
+}
+
+function winCheck() {
+  if (player.role==="CREWMATE" && player.tasks<=0) alert("CREWMATES WIN!");
+  if (player.role==="IMPOSTOR" && bots.every(b=>!b.alive)) alert("IMPOSTOR WINS!");
+}
+
+function loop() {
+  ctx.clearRect(0,0,c.width,c.height);
+
+  tasks.forEach(t=>{
+    drawCircle(t.x,t.y,10,t.done?"gray":"yellow");
+  });
+
+  bots.forEach(b=>{
+    if (b.alive) drawCircle(b.x,b.y,15,"lime");
+    else drawCircle(b.x,b.y,15,"gray");
+  });
+
+  if (player.alive)
+    drawCircle(player.x,player.y,15,player.role==="IMPOSTOR"?"red":"cyan");
+
+  move();
+  doTasks();
+  kill();
+  meetingCall();
+  if (player.killCooldown>0) player.killCooldown--;
+
+  document.getElementById("role").textContent="Role: "+player.role;
+  document.getElementById("tasks").textContent="Tasks left: "+player.tasks;
+  document.getElementById("cooldown").textContent=
+    player.role==="IMPOSTOR"?"Kill CD: "+Math.ceil(player.killCooldown/60):"";
+
+  winCheck();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>
