@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Space Deception MAX</title>
+<style>
+body{margin:0;background:#02040a;color:white;font-family:Arial;overflow:hidden}
+#ui{position:fixed;top:10px;left:10px;z-index:10}
+#bar{width:200px;height:10px;background:#333}
+#fill{height:100%;width:0%;background:lime}
+#meeting{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);text-align:center}
+button{margin:5px;padding:8px}
+canvas{display:block}
+</style>
+</head>
+<body>
+
+<div id="ui">
+  <div id="role"></div>
+  <div id="cool"></div>
+  <div id="bar"><div id="fill"></div></div>
+</div>
+
+<div id="meeting">
+  <h1>MEETING</h1>
+  <div id="votes"></div>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+const c=document.getElementById("c"),ctx=c.getContext("2d");
+c.width=innerWidth;c.height=innerHeight;
+
+const keys={};
+onkeydown=e=>keys[e.key.toLowerCase()]=true;
+onkeyup=e=>keys[e.key.toLowerCase()]=false;
+
+const snd=a=>{
+  const o=new(AudioContext)(),g=o.createOscillator();
+  g.connect(o.destination);g.frequency.value=a;g.start();setTimeout(()=>g.stop(),100);
+};
+
+const player={
+ x:200,y:200,r:14,speed:2.3,
+ role:Math.random()<.3?"IMPOSTOR":"CREWMATE",
+ tasks:5,killCD:0,skin:localStorage.skin||"cyan",
+ hat:true,pet:true,alive:true,vision:140
+};
+
+const bots=[];
+for(let i=0;i<7;i++){
+ bots.push({x:300+i*25,y:350,alive:true,brain:Math.random()*2});
+}
+
+const walls=[
+ {x:80,y:80,w:400,h:20},
+ {x:80,y:80,w:20,h:300},
+ {x:460,y:80,w:20,h:300}
+];
+
+const tasks=[];
+for(let i=0;i<5;i++) tasks.push({x:150+i*90,y:150,done:false});
+
+const vents=[{x:100,y:380},{x:500,y:120}];
+let lights=false,meeting=false;
+
+function collide(x,y){
+ return walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h);
+}
+
+function move(){
+ if(meeting||!player.alive) return;
+ let nx=player.x,ny=player.y;
+ if(keys.w)ny-=player.speed;
+ if(keys.s)ny+=player.speed;
+ if(keys.a)nx-=player.speed;
+ if(keys.d)nx+=player.speed;
+ if(!collide(nx,ny)){player.x=nx;player.y=ny}
+}
+
+function drawCircle(x,y,r,c){
+ ctx.beginPath();ctx.arc(x,y,r,0,7);ctx.fillStyle=c;ctx.fill();
+}
+
+function ai(){
+ bots.forEach(b=>{
+  if(!b.alive) return;
+  b.x+=Math.sin(Date.now()/500+b.brain);
+  b.y+=Math.cos(Date.now()/600+b.brain);
+ });
+}
+
+function task(){
+ if(player.role!=="CREWMATE"||!keys.e) return;
+ tasks.forEach(t=>{
+  if(!t.done&&Math.hypot(player.x-t.x,player.y-t.y)<25){
+   t.done=true;player.tasks--;snd(600);
+  }
+ });
+}
+
+function kill(){
+ if(player.role!=="IMPOSTOR"||player.killCD>0||!keys.k) return;
+ bots.forEach(b=>{
+  if(b.alive&&Math.hypot(player.x-b.x,player.y-b.y)<25){
+   b.alive=false;player.killCD=300;snd(120);
+  }
+ });
+}
+
+function vent(){
+ if(player.role!=="IMPOSTOR"||!keys.v) return;
+ vents.forEach(v=>{
+  if(Math.hypot(player.x-v.x,player.y-v.y)<20){
+   const o=vents.find(x=>x!==v);
+   player.x=o.x;player.y=o.y;snd(300);
+  }
+ });
+}
+
+function sabotage(){
+ if(player.role==="IMPOSTOR"&&keys.l) lights=true;
+ if(player.role==="CREWMATE"&&keys.e) lights=false;
+}
+
+function meetingCall(){
+ if(keys.m||keys.r){
+  meeting=true;document.getElementById("meeting").style.display="block";
+  const v=document.getElementById("votes");v.innerHTML="";
+  bots.forEach((b,i)=>{
+   if(b.alive){
+    const bt=document.createElement("button");
+    bt.textContent="Vote Bot "+(i+1);
+    bt.onclick=()=>{b.alive=false;endMeeting()};
+    v.appendChild(bt);
+   }
+  });
+ }
+}
+
+function endMeeting(){
+ meeting=false;document.getElementById("meeting").style.display="none";
+}
+
+function draw(){
+ ctx.clearRect(0,0,c.width,c.height);
+
+ walls.forEach(w=>{ctx.fillStyle="#333";ctx.fillRect(w.x,w.y,w.w,w.h)});
+ tasks.forEach(t=>drawCircle(t.x,t.y,8,t.done?"#555":"yellow"));
+ vents.forEach(v=>drawCircle(v.x,v.y,10,"purple"));
+ bots.forEach(b=>drawCircle(b.x,b.y,14,b.alive?"lime":"gray"));
+
+ drawCircle(player.x,player.y,14,player.skin);
+ if(player.hat) drawCircle(player.x,player.y-12,5,"white");
+ if(player.pet) drawCircle(player.x-16,player.y+10,6,"pink");
+
+ if(lights){
+  ctx.fillStyle="rgba(0,0,0,.9)";
+  ctx.fillRect(0,0,c.width,c.height);
+  ctx.globalCompositeOperation="destination-out";
+  drawCircle(player.x,player.y,player.vision,"black");
+  ctx.globalCompositeOperation="source-over";
+ }
+}
+
+function loop(){
+ move();ai();task();kill();vent();sabotage();meetingCall();
+ if(player.killCD>0)player.killCD--;
+ draw();
+
+ document.getElementById("role").textContent="Role: "+player.role;
+ document.getElementById("cool").textContent=player.role==="IMPOSTOR"?"Kill CD: "+Math.ceil(player.killCD/60):"";
+ document.getElementById("fill").style.width=((5-player.tasks)/5*100)+"%";
+
+ requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>
