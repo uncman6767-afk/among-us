@@ -2,14 +2,17 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Space Deception MAX</title>
+<title>Space Deception — Ultimate</title>
 <style>
 body{margin:0;background:#02040a;color:white;font-family:Arial;overflow:hidden}
 #ui{position:fixed;top:10px;left:10px;z-index:10}
-#bar{width:200px;height:10px;background:#333}
-#fill{height:100%;width:0%;background:lime}
-#meeting{display:none;position:fixed;inset:0;background:rgba(0,0,0,.95);text-align:center}
-button{margin:5px;padding:8px}
+#taskbar{width:200px;height:10px;background:#333;border-radius:5px}
+#taskfill{height:100%;width:0%;background:lime;border-radius:5px}
+#meeting{
+ display:none;position:fixed;inset:0;
+ background:rgba(0,0,0,.95);text-align:center;padding-top:80px
+}
+button{padding:8px;margin:5px}
 canvas{display:block}
 </style>
 </head>
@@ -17,8 +20,8 @@ canvas{display:block}
 
 <div id="ui">
   <div id="role"></div>
-  <div id="cool"></div>
-  <div id="bar"><div id="fill"></div></div>
+  <div id="cooldown"></div>
+  <div id="taskbar"><div id="taskfill"></div></div>
 </div>
 
 <div id="meeting">
@@ -26,57 +29,59 @@ canvas{display:block}
   <div id="votes"></div>
 </div>
 
-<canvas id="c"></canvas>
+<canvas id="game"></canvas>
 
 <script>
-const c=document.getElementById("c"),ctx=c.getContext("2d");
+const c=document.getElementById("game"),ctx=c.getContext("2d");
 c.width=innerWidth;c.height=innerHeight;
 
 const keys={};
 onkeydown=e=>keys[e.key.toLowerCase()]=true;
 onkeyup=e=>keys[e.key.toLowerCase()]=false;
 
-const snd=a=>{
-  const o=new(AudioContext)(),g=o.createOscillator();
-  g.connect(o.destination);g.frequency.value=a;g.start();setTimeout(()=>g.stop(),100);
+const beep=f=>{
+ const a=new AudioContext(),o=a.createOscillator();
+ o.frequency.value=f;o.connect(a.destination);o.start();setTimeout(()=>o.stop(),120);
 };
 
 const player={
- x:200,y:200,r:14,speed:2.3,
- role:Math.random()<.3?"IMPOSTOR":"CREWMATE",
- tasks:5,killCD:0,skin:localStorage.skin||"cyan",
- hat:true,pet:true,alive:true,vision:140
+ x:200,y:200,r:14,speed:2.4,
+ role:Math.random()<.25?"IMPOSTOR":"CREWMATE",
+ tasks:6,killCD:0,alive:true,
+ color:localStorage.color||"cyan",
+ vision:150
 };
 
 const bots=[];
-for(let i=0;i<7;i++){
- bots.push({x:300+i*25,y:350,alive:true,brain:Math.random()*2});
+for(let i=0;i<8;i++){
+ bots.push({
+  x:350+i*25,y:350,alive:true,
+  dir:Math.random()*6,panic:0
+ });
 }
 
 const walls=[
- {x:80,y:80,w:400,h:20},
- {x:80,y:80,w:20,h:300},
- {x:460,y:80,w:20,h:300}
+ {x:60,y:60,w:500,h:20},{x:60,y:60,w:20,h:350},
+ {x:540,y:60,w:20,h:350},{x:60,y:390,w:500,h:20}
 ];
 
 const tasks=[];
-for(let i=0;i<5;i++) tasks.push({x:150+i*90,y:150,done:false});
+for(let i=0;i<6;i++)
+ tasks.push({x:120+i*70,y:120+i*20,done:false});
 
-const vents=[{x:100,y:380},{x:500,y:120}];
+const vents=[{x:80,y:360},{x:520,y:80}];
 let lights=false,meeting=false;
 
-function collide(x,y){
- return walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h);
-}
+const hitWall=(x,y)=>walls.some(w=>x>w.x&&x<w.x+w.w&&y>w.y&&y<w.y+w.h);
 
 function move(){
- if(meeting||!player.alive) return;
+ if(meeting||!player.alive)return;
  let nx=player.x,ny=player.y;
  if(keys.w)ny-=player.speed;
  if(keys.s)ny+=player.speed;
  if(keys.a)nx-=player.speed;
  if(keys.d)nx+=player.speed;
- if(!collide(nx,ny)){player.x=nx;player.y=ny}
+ if(!hitWall(nx,ny)){player.x=nx;player.y=ny}
 }
 
 function drawCircle(x,y,r,c){
@@ -85,62 +90,65 @@ function drawCircle(x,y,r,c){
 
 function ai(){
  bots.forEach(b=>{
-  if(!b.alive) return;
-  b.x+=Math.sin(Date.now()/500+b.brain);
-  b.y+=Math.cos(Date.now()/600+b.brain);
+  if(!b.alive)return;
+  b.dir+=Math.random()-.5;
+  b.x+=Math.cos(b.dir);
+  b.y+=Math.sin(b.dir);
  });
 }
 
-function task(){
- if(player.role!=="CREWMATE"||!keys.e) return;
+function doTask(){
+ if(player.role!=="CREWMATE"||!keys.e)return;
  tasks.forEach(t=>{
   if(!t.done&&Math.hypot(player.x-t.x,player.y-t.y)<25){
-   t.done=true;player.tasks--;snd(600);
+   t.done=true;player.tasks--;beep(700);
   }
  });
 }
 
 function kill(){
- if(player.role!=="IMPOSTOR"||player.killCD>0||!keys.k) return;
+ if(player.role!=="IMPOSTOR"||player.killCD>0||!keys.k)return;
  bots.forEach(b=>{
   if(b.alive&&Math.hypot(player.x-b.x,player.y-b.y)<25){
-   b.alive=false;player.killCD=300;snd(120);
+   b.alive=false;player.killCD=360;beep(120);
   }
  });
 }
 
 function vent(){
- if(player.role!=="IMPOSTOR"||!keys.v) return;
+ if(player.role!=="IMPOSTOR"||!keys.v)return;
  vents.forEach(v=>{
   if(Math.hypot(player.x-v.x,player.y-v.y)<20){
    const o=vents.find(x=>x!==v);
-   player.x=o.x;player.y=o.y;snd(300);
+   player.x=o.x;player.y=o.y;beep(300);
   }
  });
 }
 
 function sabotage(){
- if(player.role==="IMPOSTOR"&&keys.l) lights=true;
- if(player.role==="CREWMATE"&&keys.e) lights=false;
+ if(player.role==="IMPOSTOR"&&keys.l)lights=true;
+ if(player.role==="CREWMATE"&&keys.e)lights=false;
 }
 
 function meetingCall(){
  if(keys.m||keys.r){
-  meeting=true;document.getElementById("meeting").style.display="block";
+  meeting=true;
+  document.getElementById("meeting").style.display="block";
   const v=document.getElementById("votes");v.innerHTML="";
   bots.forEach((b,i)=>{
    if(b.alive){
-    const bt=document.createElement("button");
-    bt.textContent="Vote Bot "+(i+1);
-    bt.onclick=()=>{b.alive=false;endMeeting()};
-    v.appendChild(bt);
+    const btn=document.createElement("button");
+    btn.textContent="Vote Bot "+(i+1);
+    btn.onclick=()=>{b.alive=false;endMeeting()};
+    v.appendChild(btn);
    }
   });
  }
 }
 
 function endMeeting(){
- meeting=false;document.getElementById("meeting").style.display="none";
+ meeting=false;
+ document.getElementById("meeting").style.display="none";
 }
 
 function draw(){
@@ -151,9 +159,7 @@ function draw(){
  vents.forEach(v=>drawCircle(v.x,v.y,10,"purple"));
  bots.forEach(b=>drawCircle(b.x,b.y,14,b.alive?"lime":"gray"));
 
- drawCircle(player.x,player.y,14,player.skin);
- if(player.hat) drawCircle(player.x,player.y-12,5,"white");
- if(player.pet) drawCircle(player.x-16,player.y+10,6,"pink");
+ drawCircle(player.x,player.y,14,player.color);
 
  if(lights){
   ctx.fillStyle="rgba(0,0,0,.9)";
@@ -165,13 +171,15 @@ function draw(){
 }
 
 function loop(){
- move();ai();task();kill();vent();sabotage();meetingCall();
+ move();ai();doTask();kill();vent();sabotage();meetingCall();
  if(player.killCD>0)player.killCD--;
  draw();
 
  document.getElementById("role").textContent="Role: "+player.role;
- document.getElementById("cool").textContent=player.role==="IMPOSTOR"?"Kill CD: "+Math.ceil(player.killCD/60):"";
- document.getElementById("fill").style.width=((5-player.tasks)/5*100)+"%";
+ document.getElementById("cooldown").textContent=
+  player.role==="IMPOSTOR"?"Kill CD: "+Math.ceil(player.killCD/60):"";
+ document.getElementById("taskfill").style.width=
+  ((6-player.tasks)/6*100)+"%";
 
  requestAnimationFrame(loop);
 }
